@@ -1,0 +1,51 @@
+name: Stoletnika - Temu
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'full fills the Temu template; test checks access to 6 pages'
+        type: choice
+        options: [full, test]
+        default: full
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stoletnika-temu
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      PYTHONUNBUFFERED: '1'
+      INPUT_MODE: ${{ inputs.mode }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install scraper
+        run: |
+          python --version
+          test -f templates/temu_template.xlsx
+      - name: Check template mapping and scraper
+        run: python -m unittest tests.test_scraper tests.test_http -q
+      - name: Scan requested categories and fill Temu
+        run: |
+          if [ "$INPUT_MODE" = test ]; then
+            python scrape_stoletnika.py --refresh --check-access
+          else
+            python scrape_stoletnika.py --refresh
+          fi
+      - name: Download Excel and reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stoletnika-temu-results
+          path: output/
+          if-no-files-found: warn
+          retention-days: 30
